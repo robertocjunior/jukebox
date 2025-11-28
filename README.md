@@ -42,6 +42,10 @@ Utilize o script de instalação incluído para configurar todo o ambiente (Depe
     ```bash
     sudo ./install.sh
     ```
+4. Apaga o arquivo socket antigo
+   ```bash
+   sudo rm -f /tmp/mpvsocket
+   ```
 
 O script irá:
 * Instalar Node.js, Docker, FFmpeg, MPV e Python.
