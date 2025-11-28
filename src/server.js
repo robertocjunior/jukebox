@@ -142,7 +142,7 @@ async function startMpv() {
     playerState.volume = initialVol;
 
     const mpvProcess = spawn('mpv', [
-        '--idle', '--no-video', '--force-window=no', 
+        '--idle', '--no-video', '--force-window=no','--vo=null','--ao=alsa',
         `--input-ipc-server=${MPV_SOCKET}`, `--volume=${initialVol}`
     ]);
     mpvProcess.on('close', () => setTimeout(startMpv, 1000));
