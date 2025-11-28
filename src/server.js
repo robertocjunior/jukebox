@@ -7,8 +7,9 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const os = require('os'); // <--- IMPORTANTE: Necessário para o audio
 
-const JWT_SECRET = 'secredo_super_seguro_jukebox_2025'; // Em prod, use variavel de ambiente
+const JWT_SECRET = 'secredo_super_seguro_jukebox_2025';
 
 // --- SETUP MONGODB ---
 mongoose.connect('mongodb://127.0.0.1:27017/jukebox')
@@ -19,24 +20,22 @@ mongoose.connect('mongodb://127.0.0.1:27017/jukebox')
 const UserSchema = new mongoose.Schema({
     username: { type: String, unique: true, required: true },
     password: { type: String, required: true },
-    name: String,
-    lastname: String,
-    role: { type: String, default: 'user' }, // 'admin' ou 'user'
+    name: String, lastname: String,
+    role: { type: String, default: 'user' },
     createdAt: { type: Date, default: Date.now }
 });
 const UserModel = mongoose.model('User', UserSchema);
 
 const QueueSchema = new mongoose.Schema({
     title: String, url: String, thumbnail: String,
-    addedBy: String, // Nome de quem adicionou
-    addedByUsername: String,
+    addedBy: String, addedByUsername: String,
     createdAt: { type: Date, default: Date.now }
 });
 const QueueModel = mongoose.model('Queue', QueueSchema);
 
 const HistorySchema = new mongoose.Schema({
     title: String, url: String, thumbnail: String,
-    requestedBy: String, // Nome de quem pediu
+    requestedBy: String,
     playedAt: { type: Date, default: Date.now }
 });
 const HistoryModel = mongoose.model('History', HistorySchema);
@@ -61,90 +60,86 @@ let mpvClient = null;
 app.use(express.static(__dirname + '/public'));
 app.use(express.json());
 
-// --- ROTAS DE AUTENTICAÇÃO (API) ---
-
-// 1. Checa se o sistema precisa de Setup (se não tem nenhum usuário)
+// --- ROTAS DE AUTENTICAÇÃO ---
 app.get('/api/auth/check-init', async (req, res) => {
     const count = await UserModel.countDocuments();
     res.json({ needsSetup: count === 0 });
 });
 
-// 2. Setup Inicial (Cria o Admin)
 app.post('/api/auth/setup', async (req, res) => {
     const count = await UserModel.countDocuments();
     if (count > 0) return res.status(403).json({ error: 'Sistema já configurado.' });
-
     const { username, password, name, lastname } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = await UserModel.create({
-        username, password: hashedPassword, name, lastname, role: 'admin'
-    });
-
+    const user = await UserModel.create({ username, password: hashedPassword, name, lastname, role: 'admin' });
     const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, JWT_SECRET);
     res.json({ token, user: { name: user.name, role: user.role } });
 });
 
-// 3. Login
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     const user = await UserModel.findOne({ username });
     if (!user) return res.status(400).json({ error: 'Usuário não encontrado' });
-
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(400).json({ error: 'Senha incorreta' });
-
     const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, JWT_SECRET);
     res.json({ token, user: { name: user.name, role: user.role } });
 });
 
-// 4. Criar Usuário (Apenas Admin - Middleware manual aqui pra simplificar)
 app.post('/api/auth/register', async (req, res) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Sem token' });
-
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Apenas admins podem criar usuários' });
-
         const { username, password, name, lastname } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
-        
         await UserModel.create({ username, password: hashedPassword, name, lastname, role: 'user' });
         res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- MIDDLEWARE SOCKET.IO (Segurança) ---
+// Middleware Socket
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) return next(new Error("Não autorizado"));
-
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (err) return next(new Error("Token inválido"));
-        socket.user = decoded; // Guarda dados do user no socket
+        socket.user = decoded;
         next();
     });
 });
 
-// --- PLAYER LOGIC (Mesma de antes + resetPlayerState) ---
 function resetPlayerState() {
     playerState.position = 0; playerState.duration = 0; playerState.isLoading = true;
     io.emit('playerState', playerState);
 }
 
+// --- PLAYER (MPV) - CORRIGIDO PARA PM2 ---
 async function startMpv() {
     if (fs.existsSync(MPV_SOCKET)) fs.unlinkSync(MPV_SOCKET);
     const savedVol = await SettingsModel.findOne({ key: 'volume' });
     const initialVol = savedVol ? savedVol.value : 100;
     playerState.volume = initialVol;
 
+    // --- CORREÇÃO CRÍTICA AQUI ---
+    // Pega o ID do usuário (ex: 1001) para achar a pasta de audio do Linux (/run/user/1001)
+    const uid = process.getuid(); 
+    const env = { 
+        ...process.env, 
+        XDG_RUNTIME_DIR: `/run/user/${uid}` 
+    };
+
     const mpvProcess = spawn('mpv', [
-        '--idle', '--no-video', '--force-window=no','--vo=null','--ao=alsa',
-        `--input-ipc-server=${MPV_SOCKET}`, `--volume=${initialVol}`
-    ]);
+        '--idle', 
+        '--no-video', 
+        '--vo=null',        // Sem janela
+        '--ao=alsa',        // Driver direto
+        '--force-window=no',
+        `--input-ipc-server=${MPV_SOCKET}`, 
+        `--volume=${initialVol}`
+    ], { env: env }); // <--- Injeta as variaveis
+
     mpvProcess.on('close', () => setTimeout(startMpv, 1000));
     setTimeout(connectToMpvSocket, 2000);
 }
@@ -211,7 +206,11 @@ async function getYoutubeData(url) {
 async function searchYoutube(query) {
     console.log(`🔎 Buscando: "${query}"`);
     return new Promise((resolve) => {
-        const proc = spawn('yt-dlp', [`ytsearch10:${query}`, '--flat-playlist', '--dump-json']);
+        const proc = spawn('yt-dlp', [
+            `ytsearch10:${query}`, 
+            '--flat-playlist', 
+            '--dump-json' // Garante JSON por linha
+        ]);
         let rawData = '';
         proc.stdout.on('data', d => rawData += d);
         proc.on('close', () => {
@@ -222,10 +221,12 @@ async function searchYoutube(query) {
                 try {
                     const json = JSON.parse(line);
                     if (json.id && json.title) {
+                        // Monta thumb manualmente para ser rapido e garantido
+                        const thumb = `https://i.ytimg.com/vi/${json.id}/mqdefault.jpg`;
                         results.push({
                             title: json.title,
                             url: `https://www.youtube.com/watch?v=${json.id}`,
-                            thumbnail: `https://i.ytimg.com/vi/${json.id}/mqdefault.jpg`
+                            thumbnail: thumb
                         });
                     }
                 } catch (e) {}
@@ -250,12 +251,11 @@ async function playTrack(track) {
     currentSong = track; resetPlayerState();
     await QueueModel.deleteOne({ _id: track._id });
     
-    // Salva no histórico com o nome de quem pediu
     await HistoryModel.create({ 
         title: currentSong.title, 
         url: currentSong.url, 
         thumbnail: currentSong.thumbnail,
-        requestedBy: currentSong.addedBy // <--- Importante
+        requestedBy: currentSong.addedBy
     });
 
     sendMpvCommand(['loadfile', currentSong.url]);
@@ -272,12 +272,9 @@ async function broadcastStatus() {
 startMpv();
 
 io.on('connection', async (socket) => {
-    // O usuário já está autenticado pelo middleware 'io.use'
-    // socket.user contém { id, name, role }
-    
     broadcastStatus();
     socket.emit('playerState', playerState);
-    socket.emit('user_info', socket.user); // Envia infos do usuario pro front
+    socket.emit('user_info', socket.user);
 
     socket.on('add', async (url) => {
         const data = await getYoutubeData(url);
@@ -285,7 +282,7 @@ io.on('connection', async (socket) => {
             title: data.title, 
             url: url, 
             thumbnail: data.thumbnail,
-            addedBy: socket.user.name, // <--- Salva o nome do usuário
+            addedBy: socket.user.name,
             addedByUsername: socket.user.username 
         });
         if (!currentSong) playNext(); else broadcastStatus();
@@ -308,7 +305,7 @@ io.on('connection', async (socket) => {
                 title: historyItem.title, 
                 url: historyItem.url, 
                 thumbnail: historyItem.thumbnail,
-                addedBy: socket.user.name // Re-adicionado por quem clicou no replay
+                addedBy: socket.user.name
             });
             if (!currentSong) playNext(); else broadcastStatus();
         }
