@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- CONFIGURAÇÕES ---
-# COLOQUE O LINK DO SEU REPOSITÓRIO AQUI:
+# URL do seu repositório
 REPO_URL="https://github.com/robertocjunior/jukebox-pro.git" 
 INSTALL_DIR="/opt/jukebox"
 APP_USER="jukebox"
@@ -22,10 +22,10 @@ fi
 echo -e "${GREEN}>>> Atualizando sistema e instalando dependências...${NC}"
 apt update && apt upgrade -y
 
-# ADICIONADO: avahi-daemon para suporte a .local
+# Instala avahi-daemon para suporte a .local
 apt install -y curl git ffmpeg mpv python3 python3-pip python3-venv build-essential avahi-daemon
 
-# Habilita o Avahi para iniciar no boot
+# Habilita o Avahi
 systemctl enable avahi-daemon
 systemctl start avahi-daemon
 
@@ -39,7 +39,6 @@ else
     echo "Docker já instalado."
 fi
 
-# Instalar Docker Compose (Plugin V2)
 apt install -y docker-compose-plugin
 
 # 4. Instalar Node.js (Versão 18 LTS)
@@ -56,7 +55,7 @@ echo -e "${GREEN}>>> Instalando yt-dlp...${NC}"
 curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
 chmod a+rx /usr/local/bin/yt-dlp
 
-# 6. Criar Usuário de Serviço (Segurança)
+# 6. Criar Usuário de Serviço
 echo -e "${GREEN}>>> Configurando usuário do sistema...${NC}"
 if ! id "$APP_USER" &>/dev/null; then
     useradd -m -s /bin/bash $APP_USER
@@ -75,32 +74,32 @@ else
     git clone $REPO_URL $INSTALL_DIR
 fi
 
-# Ajustar permissões para o usuário da jukebox
 chown -R $APP_USER:$APP_USER $INSTALL_DIR
 
-# 8. Instalar Dependências do Projeto e Subir DB
-echo -e "${GREEN}>>> Instalando dependências NPM e subindo Banco de Dados...${NC}"
+# 8. Instalar Dependências e Subir DB
+echo -e "${GREEN}>>> Instalando dependências e subindo Banco de Dados...${NC}"
 cd $INSTALL_DIR
-
-# Sobe o MongoDB via Docker
 docker compose up -d
-
-# Instala pacotes do Node como o usuário jukebox (não root)
 su - $APP_USER -c "cd $INSTALL_DIR && npm install"
 
-# 9. Configurar PM2 (Gerenciador de Processos)
-echo -e "${GREEN}>>> Configurando PM2 para rodar 24/7...${NC}"
-
-# Instala PM2 globalmente
+# 9. Configurar PM2
+echo -e "${GREEN}>>> Configurando PM2...${NC}"
 npm install -g pm2
 
-# Roda o app como o usuário jukebox e salva
+# Roda o app e salva
 su - $APP_USER -c "cd $INSTALL_DIR && export XDG_RUNTIME_DIR=/run/user/$(id -u $APP_USER) && pm2 start src/server.js --name jukebox"
 su - $APP_USER -c "pm2 save"
 
-# Gera e executa o script de startup do sistema
+# Configura startup
 env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $APP_USER --hp /home/$APP_USER
 
+# --- EXIBIÇÃO FINAL ---
+HOST_NAME=$(hostname)
+IP_ADDR=$(hostname -I | awk '{print $1}')
+
 echo -e "${GREEN}>>> INSTALAÇÃO CONCLUÍDA! <<<${NC}"
-echo "Acesse em: http://$(hostname).local:3000"
-echo "Ou pelo IP: http://$(hostname -I | awk '{print $1}'):3000"
+echo "---------------------------------------------------"
+echo "Acesse pelo nome: http://$HOST_NAME.local:3000"
+echo "Acesse pelo IP:   http://$IP_ADDR:3000"
+echo "---------------------------------------------------"
+echo "Usuário padrão deve ser criado no primeiro acesso."
