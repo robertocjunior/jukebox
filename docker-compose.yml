@@ -1,0 +1,12 @@
+services:
+  mongo:
+    image: mongo:latest
+    container_name: jukebox-db
+    restart: always
+    ports:
+      - "27017:27017" # Libera a porta pro seu PC acessar
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
