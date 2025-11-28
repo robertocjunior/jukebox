@@ -7,7 +7,7 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const os = require('os'); // <--- IMPORTANTE: Necessário para o audio
+const os = require('os'); // <--- 1. ADICIONADO AQUI
 
 const JWT_SECRET = 'secredo_super_seguro_jukebox_2025';
 
@@ -99,7 +99,6 @@ app.post('/api/auth/register', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Middleware Socket
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) return next(new Error("Não autorizado"));
@@ -115,15 +114,14 @@ function resetPlayerState() {
     io.emit('playerState', playerState);
 }
 
-// --- PLAYER (MPV) - CORRIGIDO PARA PM2 ---
+// --- PLAYER (MPV) CORRIGIDO ---
 async function startMpv() {
     if (fs.existsSync(MPV_SOCKET)) fs.unlinkSync(MPV_SOCKET);
     const savedVol = await SettingsModel.findOne({ key: 'volume' });
     const initialVol = savedVol ? savedVol.value : 100;
     playerState.volume = initialVol;
 
-    // --- CORREÇÃO CRÍTICA AQUI ---
-    // Pega o ID do usuário (ex: 1001) para achar a pasta de audio do Linux (/run/user/1001)
+    // 2. CORREÇÃO CRÍTICA AQUI:
     const uid = process.getuid(); 
     const env = { 
         ...process.env, 
@@ -131,14 +129,9 @@ async function startMpv() {
     };
 
     const mpvProcess = spawn('mpv', [
-        '--idle', 
-        '--no-video', 
-        '--vo=null',        // Sem janela
-        '--ao=alsa',        // Driver direto
-        '--force-window=no',
-        `--input-ipc-server=${MPV_SOCKET}`, 
-        `--volume=${initialVol}`
-    ], { env: env }); // <--- Injeta as variaveis
+        '--idle', '--no-video', '--vo=null', '--ao=alsa', '--force-window=no',
+        `--input-ipc-server=${MPV_SOCKET}`, `--volume=${initialVol}`
+    ], { env: env }); // <--- 3. INJEÇÃO DO AMBIENTE
 
     mpvProcess.on('close', () => setTimeout(startMpv, 1000));
     setTimeout(connectToMpvSocket, 2000);
@@ -206,11 +199,7 @@ async function getYoutubeData(url) {
 async function searchYoutube(query) {
     console.log(`🔎 Buscando: "${query}"`);
     return new Promise((resolve) => {
-        const proc = spawn('yt-dlp', [
-            `ytsearch10:${query}`, 
-            '--flat-playlist', 
-            '--dump-json' // Garante JSON por linha
-        ]);
+        const proc = spawn('yt-dlp', [`ytsearch10:${query}`, '--flat-playlist', '--dump-json']);
         let rawData = '';
         proc.stdout.on('data', d => rawData += d);
         proc.on('close', () => {
@@ -221,12 +210,10 @@ async function searchYoutube(query) {
                 try {
                     const json = JSON.parse(line);
                     if (json.id && json.title) {
-                        // Monta thumb manualmente para ser rapido e garantido
-                        const thumb = `https://i.ytimg.com/vi/${json.id}/mqdefault.jpg`;
                         results.push({
                             title: json.title,
                             url: `https://www.youtube.com/watch?v=${json.id}`,
-                            thumbnail: thumb
+                            thumbnail: `https://i.ytimg.com/vi/${json.id}/mqdefault.jpg`
                         });
                     }
                 } catch (e) {}
@@ -250,14 +237,12 @@ async function playNext() {
 async function playTrack(track) {
     currentSong = track; resetPlayerState();
     await QueueModel.deleteOne({ _id: track._id });
-    
     await HistoryModel.create({ 
         title: currentSong.title, 
         url: currentSong.url, 
         thumbnail: currentSong.thumbnail,
-        requestedBy: currentSong.addedBy
+        requestedBy: currentSong.addedBy 
     });
-
     sendMpvCommand(['loadfile', currentSong.url]);
     sendMpvCommand(['set_property', 'pause', false]);
     broadcastStatus();
@@ -278,13 +263,7 @@ io.on('connection', async (socket) => {
 
     socket.on('add', async (url) => {
         const data = await getYoutubeData(url);
-        await QueueModel.create({ 
-            title: data.title, 
-            url: url, 
-            thumbnail: data.thumbnail,
-            addedBy: socket.user.name,
-            addedByUsername: socket.user.username 
-        });
+        await QueueModel.create({ title: data.title, url: url, thumbnail: data.thumbnail, addedBy: socket.user.name, addedByUsername: socket.user.username });
         if (!currentSong) playNext(); else broadcastStatus();
     });
 
@@ -301,12 +280,7 @@ io.on('connection', async (socket) => {
     socket.on('replay_history', async (id) => {
         const historyItem = await HistoryModel.findById(id);
         if (historyItem) {
-            await QueueModel.create({ 
-                title: historyItem.title, 
-                url: historyItem.url, 
-                thumbnail: historyItem.thumbnail,
-                addedBy: socket.user.name
-            });
+            await QueueModel.create({ title: historyItem.title, url: historyItem.url, thumbnail: historyItem.thumbnail, addedBy: socket.user.name });
             if (!currentSong) playNext(); else broadcastStatus();
         }
     });
