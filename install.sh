@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- CONFIGURAÇÕES ---
-# URL do seu repositório
+# URL DO SEU REPOSITÓRIO (Atualizada)
 REPO_URL="https://github.com/robertocjunior/jukebox.git" 
 INSTALL_DIR="/opt/jukebox"
 APP_USER="jukebox"
