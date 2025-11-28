@@ -30,7 +30,7 @@ Utilize o script de instalação incluído para configurar todo o ambiente (Depe
 
 1.  Baixe o script de instalação:
     ```bash
-    wget [https://raw.githubusercontent.com/robertocjunior/jukebox/main/install.sh](https://raw.githubusercontent.com/robertocjunior/jukebox/main/install.sh)
+    wget https://raw.githubusercontent.com/robertocjunior/jukebox/main/install.sh
     ```
 
 2.  Dê permissão de execução:
