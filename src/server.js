@@ -129,7 +129,7 @@ async function startMpv() {
     };
 
     const mpvProcess = spawn('mpv', [
-        '--idle', '--no-video', '--vo=null', '--ao=alsa', '--force-window=no', '--demuxer-max-bytes=128MiB',
+        '--idle', '--no-video', '--vo=null', '--ao=alsa', '--force-window=no', '--demuxer-max-bytes=1024MiB',
         `--input-ipc-server=${MPV_SOCKET}`, `--volume=${initialVol}`
     ], { env: env }); // <--- 3. INJEÇÃO DO AMBIENTE
 
