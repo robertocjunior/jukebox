@@ -2,7 +2,7 @@
 
 # --- CONFIGURAÇÕES ---
 # COLOQUE O LINK DO SEU REPOSITÓRIO AQUI:
-REPO_URL="https://github.com/robertocjunior/jukebox-pro.git" 
+REPO_URL="https://github.com/robertocjunior/jukebox.git" 
 INSTALL_DIR="/opt/jukebox"
 APP_USER="jukebox"
 

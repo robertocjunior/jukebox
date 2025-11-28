@@ -71,8 +71,8 @@ sudo chmod a+rx /usr/local/bin/yt-dlp
 
 ```bash
 # Clone o repositório
-git clone [https://github.com/seu-usuario/jukebox-pro.git](https://github.com/seu-usuario/jukebox-pro.git)
-cd jukebox-pro
+git clone [https://github.com/seu-usuario/jukebox.git](https://github.com/seu-usuario/jukebox.git)
+cd jukebox
 
 # Suba o Banco de Dados
 docker compose up -d
