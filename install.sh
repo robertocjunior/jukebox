@@ -2,7 +2,7 @@
 
 # --- CONFIGURAÇÕES ---
 # COLOQUE O LINK DO SEU REPOSITÓRIO AQUI:
-REPO_URL="https://github.com/robertocjunior/jukebox.git" 
+REPO_URL="https://github.com/robertocjunior/jukebox-pro.git" 
 INSTALL_DIR="/opt/jukebox"
 APP_USER="jukebox"
 
@@ -21,7 +21,13 @@ fi
 # 2. Atualizar Sistema e Instalar Dependências Básicas
 echo -e "${GREEN}>>> Atualizando sistema e instalando dependências...${NC}"
 apt update && apt upgrade -y
-apt install -y curl git ffmpeg mpv python3 python3-pip python3-venv build-essential
+
+# ADICIONADO: avahi-daemon para suporte a .local
+apt install -y curl git ffmpeg mpv python3 python3-pip python3-venv build-essential avahi-daemon
+
+# Habilita o Avahi para iniciar no boot
+systemctl enable avahi-daemon
+systemctl start avahi-daemon
 
 # 3. Instalar Docker e Docker Compose
 echo -e "${GREEN}>>> Instalando Docker...${NC}"
@@ -88,16 +94,13 @@ echo -e "${GREEN}>>> Configurando PM2 para rodar 24/7...${NC}"
 # Instala PM2 globalmente
 npm install -g pm2
 
-# Roda o app como o usuário jukebox
-# Nota: Forçamos variaveis de áudio para garantir que o MPV funcione sem interface gráfica
+# Roda o app como o usuário jukebox e salva
 su - $APP_USER -c "cd $INSTALL_DIR && export XDG_RUNTIME_DIR=/run/user/$(id -u $APP_USER) && pm2 start src/server.js --name jukebox"
-
-# Salva a lista de processos
 su - $APP_USER -c "pm2 save"
 
 # Gera e executa o script de startup do sistema
 env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $APP_USER --hp /home/$APP_USER
 
 echo -e "${GREEN}>>> INSTALAÇÃO CONCLUÍDA! <<<${NC}"
-echo "Acesse em: http://$(hostname -I | awk '{print $1}'):3000"
-echo "Usuário padrão deve ser criado no primeiro acesso."
+echo "Acesse em: http://$(hostname).local:3000"
+echo "Ou pelo IP: http://$(hostname -I | awk '{print $1}'):3000"
