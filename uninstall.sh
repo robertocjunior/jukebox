@@ -58,7 +58,7 @@ fi
 # Limpeza extra garantida do docker
 if command -v docker &> /dev/null; then
     docker rm -f jukebox-db >/dev/null 2>&1
-    docker volume rm jukebox-pro_mongo-data >/dev/null 2>&1
+    docker volume rm jukebox_mongo-data >/dev/null 2>&1
 fi
 
 # 4. Remover Diretórios e Arquivos
